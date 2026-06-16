@@ -10,8 +10,7 @@ Streamlit Cloud hosts the **portal** (`streamlit_app.py`) — your About page, p
 2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
 3. Click **New app** → select your repo.
 4. Set **Main file path** to `streamlit_app.py`.
-5. Set **Requirements file** to `requirements-streamlit.txt` (Advanced settings).
-6. Deploy.
+5. Deploy. Streamlit Cloud will install the lightweight `requirements.txt`.
 
 Your app will be live at `https://<app-name>.streamlit.app`.
 
@@ -36,6 +35,9 @@ The complete stack (discovery, PQC tunnel, React UI) runs via:
 ```
 
 Open http://localhost:8080
+
+The local/VPS launcher installs `requirements-backend.txt`, which contains the
+full FastAPI gateway dependencies.
 
 For production VPS deployment, run `python -m backend.main` behind a reverse proxy (nginx/Caddy) with TLS. Build the frontend first (`cd frontend && npm run build`).
 

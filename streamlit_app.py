@@ -10,6 +10,7 @@ Set GATEWAY_API_URL in Streamlit secrets to show live API status (optional).
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import streamlit as st
@@ -21,7 +22,24 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-API_URL = os.getenv("GATEWAY_API_URL", "").rstrip("/")
+def get_gateway_api_url() -> str:
+    """Read Streamlit Cloud/root env config without warning locally."""
+    configured = os.getenv("GATEWAY_API_URL", "")
+
+    local_secret_files = [
+        Path.home() / ".streamlit" / "secrets.toml",
+        Path.cwd() / ".streamlit" / "secrets.toml",
+    ]
+    if not configured and any(path.exists() for path in local_secret_files):
+        try:
+            configured = st.secrets.get("GATEWAY_API_URL", "")
+        except Exception:
+            configured = ""
+
+    return str(configured).strip().rstrip("/")
+
+
+API_URL = get_gateway_api_url()
 
 # ── Custom CSS (dark theme aligned with React dashboard) ─────────────────────
 st.markdown(

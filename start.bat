@@ -33,7 +33,7 @@ call .venv\Scripts\activate.bat
 
 echo [2/5] Installing backend dependencies...
 python -m pip install --upgrade pip >nul
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-backend.txt
 if !errorlevel! NEQ 0 (
     echo  ! Backend dependency install failed.
     exit /b 1

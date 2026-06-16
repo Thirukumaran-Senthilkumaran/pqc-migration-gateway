@@ -19,7 +19,7 @@ source .venv/bin/activate
 
 echo "[2/5] Installing backend dependencies..."
 python -m pip install --upgrade pip >/dev/null
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-backend.txt
 
 # ---------- Frontend -------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
