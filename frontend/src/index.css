@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    background:
+      radial-gradient(60rem 40rem at 80% -10%, rgba(124, 92, 255, 0.12), transparent 60%),
+      radial-gradient(40rem 30rem at -10% 110%, rgba(16, 185, 129, 0.08), transparent 60%),
+      #0b0d12;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+  ::selection { background: rgba(124, 92, 255, 0.4); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #252b38; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #34394a; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-bg-border rounded-xl;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-accent hover:bg-accent-glow text-white shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn bg-bg-soft hover:bg-bg-hover border border-bg-border text-slate-200;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium border;
+  }
+  .badge-ok    { @apply badge bg-emerald-500/10 border-emerald-500/30 text-emerald-300; }
+  .badge-warn  { @apply badge bg-amber-500/10  border-amber-500/30  text-amber-300; }
+  .badge-bad   { @apply badge bg-red-500/10    border-red-500/30    text-red-300; }
+  .badge-muted { @apply badge bg-slate-500/10  border-slate-500/30  text-slate-300; }
+  .badge-pqc   { @apply badge bg-accent/15     border-accent/40     text-accent-glow; }
+
+  .stat-label {
+    @apply text-xs uppercase tracking-wider text-muted;
+  }
+  .stat-value {
+    @apply text-2xl font-semibold text-slate-100;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm
+           text-slate-300 hover:text-white hover:bg-bg-hover transition-colors;
+  }
+  .nav-link-active {
+    @apply nav-link bg-accent/15 text-white border border-accent/30 shadow-glow;
+  }
+}
