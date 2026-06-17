@@ -1,5 +1,6 @@
-# Streamlit Cloud — UI only (no FastAPI / pydantic)
-# API runs separately on Render (requirements-api.txt)
 streamlit>=1.40.0
 httpx>=0.28.0
 pandas>=2.0.0
+fastapi
+uvicorn[standard]
+python-multipart
