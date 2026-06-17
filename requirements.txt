@@ -1,2 +1,4 @@
-streamlit>=1.40.0
-httpx>=0.28.0
+# Combined requirements (local dev)
+-r requirements-api.txt
+-r requirements-ui.txt
+requests>=2.31.0

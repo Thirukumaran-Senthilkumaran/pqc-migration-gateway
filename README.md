@@ -1,163 +1,58 @@
-# PQC Migration Gateway
+# PQC Cloud Gateway
 
-> **A plug-and-play web gateway that brings Post-Quantum Cryptography (PQC) to every device on your local network — without touching the devices themselves.**
+> Cloud-hosted post-quantum migration platform with LAN Connector architecture.
 
-![status](https://img.shields.io/badge/status-prototype-blue) ![pqc](https://img.shields.io/badge/PQC-ML--KEM--768%20%2B%20ML--DSA--65-success) ![license](https://img.shields.io/badge/license-MIT-green)
+Protect entire LAN segments without upgrading every device. A lightweight **LAN Connector**
+runs inside your network, uploads inventory to the cloud, and the dashboard manages
+PQC wrap policies, staged migration, and consulting-grade reports.
 
----
-
-## The Problem
-
-Local-area networks are full of devices that **cannot** be upgraded to post-quantum cryptography:
-
-- Industrial sensors, PLCs, HVAC controllers
-- IP cameras, printers, smart-TVs
-- Embedded medical / point-of-sale devices
-- Legacy PCs running outdated TLS stacks
-
-Updating each node individually is operationally impossible at scale, and many of them have CPUs too weak to run lattice-based crypto anyway.
-
-## The Solution
-
-A **gateway** that:
-
-1. **Discovers** every node on the LAN automatically.
-2. **Classifies** each node by PQC-readiness, criticality, and traffic profile.
-3. **Wraps** outbound classical traffic in a PQC-secured tunnel (ML-KEM-768 key exchange + ML-DSA-65 authentication + AES-256-GCM bulk).
-4. **Plans a stage-by-stage migration**: high-priority devices get native PQC first; the gateway covers the rest until they are upgraded — and quietly retires once everyone is migrated.
-5. Is **plug-and-play**: drop the box on your network, open the dashboard, done.
-
----
-
-## Architecture (high level)
+## Architecture
 
 ```
-              ┌────────────────────────────────────┐
-              │          Web Dashboard             │
-              │   React + Tailwind, real-time WS   │
-              └────────────────┬───────────────────┘
-                               │ REST / WebSocket
-              ┌────────────────▼───────────────────┐
-              │            FastAPI Core            │
-              ├────────────────────────────────────┤
-              │ Discovery │ Classifier │ Migration │
-              │  Engine   │   Engine   │  Planner  │
-              ├───────────┴────────────┴───────────┤
-              │   PQC Engine  (ML-KEM + ML-DSA)    │
-              │   Gateway / Proxy (asyncio)        │
-              │   Monitor  (traffic stats)         │
-              └────────────────┬───────────────────┘
-                               │
-        ┌──────────────────────┼─────────────────────┐
-        │                      │                     │
-   ┌────▼────┐            ┌────▼────┐           ┌────▼────┐
-   │  Node A │   . . .    │  Node N │           │ Upstream│
-   │ (legacy)│            │ (IoT)   │           │  / WAN  │
-   └─────────┘            └─────────┘           └─────────┘
+LAN (connector.py)  ──HTTPS POST /api/ingest──▶  FastAPI Cloud API
+                                                        ▲
+Streamlit Dashboard  ──────────────────────────────── HTTP
 ```
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the deep dive.
-
----
-
-## Quick Start (plug-and-play)
-
-### Windows
+## Quick start (local)
 
 ```powershell
 .\start.bat
 ```
 
-### Linux / macOS
+- **API:** http://localhost:8000
+- **UI:** http://localhost:8501
 
-```bash
-chmod +x start.sh && ./start.sh
-```
+## Tabs
 
-The launcher will:
+| Tab | Purpose |
+|-----|---------|
+| About | Author, contact, motivation |
+| Dashboard | PQC coverage, LAN stats, remote B2B gateway |
+| PQC Wrapper | Token creation, connector download, wrap/unwrap |
+| PQC Inventory | Priority tiers + AI Migration Advisor |
+| Reports | PDF, CSV, JSON, HLD, change plan, risk |
 
-1. Create a Python virtualenv.
-2. Install backend dependencies.
-3. Install frontend dependencies & build the dashboard.
-4. Start the gateway on `http://localhost:8080`.
+## LAN Connector workflow
 
-Open [http://localhost:8080](http://localhost:8080) in your browser.
+1. Open dashboard → **PQC Wrapper**
+2. Create connector token
+3. Download `connector.py`
+4. Inside LAN: `pip install requests && python connector.py --token <token> --url http://localhost:8000`
+5. Dashboard populates automatically
 
-> First-run discovery scan starts automatically. Default credentials: `admin / admin` — change them in **Settings**.
+## Cloud deployment
 
----
+| Component | Platform | Entry |
+|-----------|----------|-------|
+| API | Render / Railway | `uvicorn backend.main:app --port 8000` |
+| UI | Streamlit Cloud | `streamlit_app.py`, requirements: `requirements-ui.txt` |
 
-## Tech Stack
-
-| Layer | Tech |
-|------|------|
-| Backend  | Python 3.11, FastAPI, asyncio, SQLAlchemy, SQLite |
-| PQC      | ML-KEM-768 (FIPS 203), ML-DSA-65 (FIPS 204), AES-256-GCM, HKDF-SHA-384 |
-| Networking | Raw sockets, asyncio TCP proxy, ARP/mDNS/SSDP discovery |
-| Frontend | React 18, TypeScript, Vite, TailwindCSS, Recharts, Zustand |
-| Realtime | WebSockets (FastAPI) |
-
----
-
-## Migration Stages
-
-The gateway is designed around a **staged rollout** model:
-
-| Stage | Description | Action |
-|-------|-------------|--------|
-| **0 — Discovery** | All nodes inventoried, gateway in monitor mode | Auto |
-| **1 — Wrap-All** | All outbound traffic goes through PQC tunnel | Auto |
-| **2 — Native PQC, Tier-1** | Critical/high-value nodes upgraded to native PQC | Manual schedule |
-| **3 — Native PQC, Tier-2** | Standard endpoints upgraded | Manual schedule |
-| **4 — Native PQC, Tier-3** | IoT / low-priority nodes upgraded or retired | Manual schedule |
-| **5 — Gateway Standby** | Gateway only protects last-mile legacy devices | Auto |
-
-Priority is computed automatically from: device class, traffic volume, exposed services, OS fingerprint, declared business criticality.
-
----
-
-## Folder Layout
-
-```
-.
-├── backend/              # FastAPI service (PQC + gateway + APIs)
-│   ├── main.py
-│   ├── config.py
-│   ├── database.py
-│   ├── models.py
-│   ├── schemas.py
-│   ├── pqc/              # PQC engine (KEM, signatures, tunnel)
-│   ├── network/          # discovery, classifier, gateway, monitor
-│   ├── migration/        # stage planner
-│   └── api/              # REST + WebSocket routers
-├── frontend/             # React + Vite + Tailwind dashboard
-├── data/                 # SQLite DB & runtime artifacts (auto-created)
-├── requirements.txt
-├── start.bat / start.sh
-├── ARCHITECTURE.md
-└── README.md
-```
-
----
+Set Streamlit secret: `API_BASE_URL = https://your-api.onrender.com`
 
 ## Author
 
-**Thirukumaran Senthilkumaran** — Network Security & IAM enthusiast.  
-MSc Applied Cybersecurity, University of South Wales.
+**Thirukumaran Senthilkumaran**  
+[LinkedIn](https://www.linkedin.com/in/thirukumaran-s-45588b43) · Thirukumaranarun98@gmail.com · +91 8098276733
 
-See the **About** page in the dashboard (`/about`) or the [Streamlit portal](DEPLOYMENT.md) for motivation and background.
-
----
-
-## Deploy online
-
-| Target | What runs | Guide |
-|--------|-----------|-------|
-| **Streamlit Cloud** | About page, project overview, optional API status | [DEPLOYMENT.md](DEPLOYMENT.md) |
-| **Local / VPS** | Full gateway (discovery, PQC tunnel, React UI) | `start.bat` or `start.sh` |
-
----
-
-## License
-
-MIT — see `LICENSE`.
+MIT License
