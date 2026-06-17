@@ -1,6 +1,13 @@
 """In-process smoke test of the full API flow (no network needed)."""
 
+import os
+import tempfile
+
 from fastapi.testclient import TestClient
+
+test_db = tempfile.NamedTemporaryFile(prefix="pqcg-smoke-", suffix=".db", delete=False)
+test_db.close()
+os.environ["PQCG_DATABASE_URL"] = f"sqlite:///{test_db.name}"
 
 from api.database import init_db
 from api.main import app
