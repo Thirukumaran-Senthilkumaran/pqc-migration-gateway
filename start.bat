@@ -12,7 +12,7 @@ if not exist .venv (
 )
 call .venv\Scripts\activate.bat
 
-pip install -q -r requirements.txt
+pip install -q -r requirements-local.txt
 
 echo.
 echo [1/2] Starting API on http://localhost:8000

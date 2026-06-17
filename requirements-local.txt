@@ -1,0 +1,4 @@
+# Local development — API + UI + connector
+-r requirements-api.txt
+-r requirements-ui.txt
+requests>=2.31.0

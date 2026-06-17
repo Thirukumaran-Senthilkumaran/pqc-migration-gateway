@@ -9,7 +9,11 @@ https://github.com/Thirukumaran-Senthilkumaran/pqc-migration-gateway
 | Setting | Value |
 |---------|-------|
 | Main file path | `streamlit_app.py` |
-| Requirements file | `requirements-streamlit.txt` |
+| Requirements file | `requirements.txt` *(default — UI only, 3 packages)* |
+| Python version | **3.12** (set in app Advanced settings if needed) |
+
+> **Do not** point Streamlit at `requirements-local.txt` or `requirements-api.txt` —
+> those include FastAPI/pydantic and will fail on Streamlit Cloud.
 
 ## Secrets (Streamlit Cloud → App → Settings → Secrets)
 
