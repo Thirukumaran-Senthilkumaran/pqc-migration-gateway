@@ -1,384 +1,414 @@
-"""
-PQC Cloud Gateway — Streamlit UI
-Sophos-inspired light theme · 5 tabs · Settings panel
-Run: streamlit run ui/app.py
-"""
+"""PQC Migration Gateway - Streamlit dashboard (5 tabs + settings)."""
 
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
 
-import httpx
 import pandas as pd
 import streamlit as st
 
-# ── Config ───────────────────────────────────────────────────────────────────
-API = os.getenv("API_BASE_URL", os.getenv("PQCG_API_URL", "http://localhost:8000")).rstrip("/")
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from ui import api_client as api  # noqa: E402
+from ui.theme import CSS  # noqa: E402
+
 PROFILE_IMG = ROOT / "static" / "profile.jpg"
+CONNECTOR_SRC = ROOT / "connector" / "connector.py"
 
-st.set_page_config(
-    page_title="PQC Cloud Gateway",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# ── Light Sophos-style theme ───────────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.main { background: #f4f6f9; }
-.block-container { padding-top: 1rem; max-width: 1400px; }
-section[data-testid="stSidebar"] {
-    background: #ffffff;
-    border-right: 1px solid #e2e8f0;
-}
-section[data-testid="stSidebar"] .stRadio label {
-    font-weight: 500;
-    color: #334155;
-}
-.sophos-header {
-    background: linear-gradient(90deg, #0052cc 0%, #0065ff 100%);
-    color: white;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.metric-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 1.25rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.tier-1 { color: #dc2626; font-weight: 600; }
-.tier-2 { color: #d97706; font-weight: 600; }
-.tier-3 { color: #64748b; }
-.contact-link { color: #0052cc; text-decoration: none; }
-.contact-link:hover { text-decoration: underline; }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="PQC Migration Gateway", page_icon="🛡️", layout="wide",
+                   initial_sidebar_state="expanded")
+st.markdown(CSS, unsafe_allow_html=True)
 
 
-def api_get(path: str):
-    try:
-        r = httpx.get(f"{API}{path}", timeout=8)
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        st.error(f"API unreachable ({API}): {e}")
-        return None
-
-
-def api_post(path: str, body: dict):
-    try:
-        r = httpx.post(f"{API}{path}", json=body, timeout=8)
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        st.error(f"API error: {e}")
-        return None
-
-
+# --------------------------------------------------------------------------- #
+#  Shared chrome                                                              #
+# --------------------------------------------------------------------------- #
 def header_bar():
-    c1, c2 = st.columns([5, 1])
+    c1, c2 = st.columns([6, 1])
     with c1:
         st.markdown(
-            '<div class="sophos-header"><span style="font-size:1.1rem;font-weight:600;">'
-            '🛡️ PQC Cloud Gateway</span>'
-            '<span style="font-size:0.8rem;opacity:0.9;">Post-Quantum LAN Protection</span></div>',
+            '<div class="pqc-header">'
+            '<div><div class="title">🛡️ PQC Migration Gateway</div>'
+            '<div class="subtitle">Wrap your LAN in post-quantum encryption — protect legacy '
+            'devices that will never get a PQC upgrade</div></div></div>',
             unsafe_allow_html=True,
         )
     with c2:
         with st.popover("⚙️ Settings", use_container_width=True):
-            st.markdown("#### Notification settings")
-            st.checkbox("Email alerts on new high-risk devices", value=True, key="n1")
+            st.markdown("##### Notifications")
+            st.checkbox("Email on new high-risk devices", value=True, key="n1")
             st.checkbox("Connector offline alerts", value=True, key="n2")
             st.checkbox("Weekly migration summary", value=False, key="n3")
             st.divider()
-            st.markdown("#### Admin access")
-            st.text_input("Admin username", value="admin", disabled=True)
+            st.markdown("##### Admin & privileges")
+            st.text_input("Admin user", value="admin", disabled=True)
             st.selectbox("Privilege level", ["Viewer", "Operator", "Administrator"], index=2)
+            st.toggle("Require MFA for policy changes", value=True)
             st.divider()
-            st.markdown("#### Security & privacy")
+            st.markdown("##### Security & privacy")
             st.caption(
-                "Connector tokens are hashed at rest. Inventory data is encrypted in transit (HTTPS). "
-                "No packet payloads are stored — only network metadata. "
-                "Revoke tokens anytime from PQC Wrapper tab."
+                "Connector tokens are hashed (SHA-256) at rest. Only network **metadata** is "
+                "collected — never packet payloads. Data is encrypted in transit (HTTPS). "
+                "Tokens can be revoked anytime from the PQC Wrapper tab."
             )
 
 
-# ── TAB 1: About ─────────────────────────────────────────────────────────────
+def tier_pill(tier: str) -> str:
+    cls = {"tier-1": "pill-t1", "tier-2": "pill-t2", "tier-3": "pill-t3"}.get(tier, "pill-t3")
+    return f'<span class="pill {cls}">{tier}</span>'
+
+
+# --------------------------------------------------------------------------- #
+#  TAB 1 — About                                                              #
+# --------------------------------------------------------------------------- #
 def page_about():
-    col_img, col_text = st.columns([1, 3])
+    col_img, col_txt = st.columns([1, 3])
     with col_img:
         if PROFILE_IMG.exists():
-            st.image(str(PROFILE_IMG), width=180)
+            st.image(str(PROFILE_IMG), width=190)
         else:
-            st.image("https://ui-avatars.com/api/?name=Thirukumaran+S&size=180&background=0052cc&color=fff&bold=true", width=180)
-    with col_text:
+            st.image(
+                "https://ui-avatars.com/api/?name=Thirukumaran+S&size=190&background=1761d2&color=fff&bold=true",
+                width=190,
+            )
+    with col_txt:
         st.markdown("## Thirukumaran Senthilkumaran")
         st.markdown("**Network Security & IAM Enthusiast**")
         st.markdown("MSc Applied Cybersecurity — *University of South Wales*")
+        st.markdown(
+            '🔗 <a class="contact-link" href="https://www.linkedin.com/in/thirukumaran-s-45588b43" '
+            'target="_blank">LinkedIn</a>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("""
-I am a cybersecurity practitioner focused on **network security**, **identity and access
-management (IAM)**, and building defences that organisations can actually operate.
-My MSc gave me a foundation in threat modelling and secure architecture; what drives me
-is turning that into systems that **solve real business problems**.
+I am a cybersecurity practitioner focused on **network security**, **identity & access
+management**, and building defences that organisations can actually operate. My MSc gave me
+a foundation in threat modelling and secure architecture; what drives me is turning that into
+systems that **solve real business problems**.
 
-Cybersecurity must be **proactive** — woven into infrastructure and processes, not owned
-only by a specialist team. As we enter the **AI era**, attack surfaces evolve faster than
-policies. Networks and cloud estates must be resilient: ready to detect anomalies, adapt,
-and recover without halting the business.
+Cybersecurity must be **proactive** — woven into infrastructure, not owned by one team.
+As we enter the **AI era**, attack surfaces evolve faster than policy. Networks must be
+resilient: ready to detect, adapt, and recover without halting the business.
+""")
 
-Security is an enabler. Infrastructure must be ready to face threats that emerge as
-technology accelerates — that belief shaped this platform.
-    """)
-
-    st.markdown("### Motivation to build this")
+    st.markdown("### Why I built this")
     st.markdown("""
-**Enterprises must be ready for the post-quantum era.** NIST has standardised ML-KEM and
-ML-DSA. Critical infrastructure — energy, healthcare, finance — is already inventorying
-cryptographic dependencies. **SMBs cannot be left behind.** Hundreds of legacy devices will
-never receive native PQC firmware. A **gateway-based migration** delivers quantum-safe
-coverage now, then upgrades endpoints tier-by-tier without a big-bang cutover.
-
-This cloud platform lets you deploy a **LAN Connector** inside your network, discover
-every device, wrap traffic in PQC, and plan a hybrid staged rollout — at a pace your
-infrastructure can sustain.
-    """)
+NIST has standardised **ML-KEM** and **ML-DSA**. Critical infrastructure is already
+inventorying its cryptography — but **SMBs and legacy estates risk being left behind**.
+Hundreds of devices will never receive native PQC firmware. A **gateway-based migration**
+delivers quantum-safe coverage *now*, then upgrades endpoints tier-by-tier — no big-bang
+cutover. It also secures **B2B data transfer** between organisations over a PQC tunnel.
+""")
 
     st.markdown("### Contact")
     st.markdown(
-        "- 🔗 [LinkedIn](https://www.linkedin.com/in/thirukumaran-s-45588b43)  \n"
-        "- ✉️ [Thirukumaranarun98@gmail.com](mailto:Thirukumaranarun98@gmail.com)  \n"
-        "- 💬 WhatsApp: [+91 8098276733](https://wa.me/918098276733)"
+        '- 🔗 <a class="contact-link" href="https://www.linkedin.com/in/thirukumaran-s-45588b43" target="_blank">www.linkedin.com/in/thirukumaran-s-45588b43</a>  \n'
+        '- ✉️ <a class="contact-link" href="mailto:Thirukumaranarun98@gmail.com">Thirukumaranarun98@gmail.com</a>  \n'
+        '- 💬 WhatsApp: <a class="contact-link" href="https://wa.me/918098276733" target="_blank">+91 8098276733</a>',
+        unsafe_allow_html=True,
     )
 
 
-# ── TAB 2: Dashboard ─────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+#  TAB 2 — Dashboard                                                          #
+# --------------------------------------------------------------------------- #
 def page_dashboard():
-    stats = api_get("/api/dashboard")
-    devices = api_get("/api/devices") or []
+    stats = api.get("/api/dashboard")
+    devices = api.get("/api/devices") or []
 
     if stats:
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("LAN Devices", stats["total_devices"])
-        m2.metric("PQC Wrapped", stats["wrapped_devices"])
-        m3.metric("PQC Coverage", f"{stats['pqc_coverage_pct']}%")
-        m4.metric("Tier-1 Critical", stats["tier1_devices"])
-        m5.metric("Connectors Online", stats["connectors_online"])
+        m = st.columns(5)
+        m[0].metric("LAN devices", stats["total_devices"])
+        m[1].metric("PQC wrapped", stats["wrapped_devices"])
+        m[2].metric("PQC coverage", f"{stats['pqc_coverage_pct']}%")
+        m[3].metric("Tier-1 critical", stats["tier1_devices"])
+        m[4].metric("Connectors online", stats["connectors_online"])
+
+        safe = stats.get("quantum_safe")
+        chip = ('<span class="chip chip-green">quantum-safe (liboqs)</span>' if safe
+                else '<span class="chip chip-blue">demo PQC engine</span>')
+        st.markdown(
+            f"PQC engine: **{stats.get('pqc_backend','demo')}** &nbsp; {chip}",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
-    c1, c2 = st.columns(2)
+    c1, c2 = st.columns([3, 2])
 
     with c1:
         st.markdown("#### LAN traffic & PQC state")
         if devices:
             df = pd.DataFrame(devices)
-            wrap_counts = df["wrap_status"].value_counts()
-            st.bar_chart(wrap_counts)
-            tier_counts = df["priority_tier"].value_counts()
-            st.markdown("**Devices by priority tier**")
-            st.bar_chart(tier_counts)
+            wrap_counts = df["wrap_status"].value_counts().rename(
+                {"wrapped": "PQC wrapped", "none": "Unprotected"}
+            )
+            st.bar_chart(wrap_counts, color="#1761d2", height=240)
+            st.caption("Devices by priority tier")
+            st.bar_chart(df["priority_tier"].value_counts().sort_index(), color="#2f8bff", height=200)
         else:
             st.info("No inventory yet. Deploy the LAN Connector from the **PQC Wrapper** tab.")
 
     with c2:
         st.markdown("#### Remote gateway (B2B)")
-        st.caption("Secure business data transfer between organisations via cloud PQC tunnel peer.")
-        rg = api_post("/api/remote-gateway", {})
+        st.caption("Secure business-to-business data transfer over a PQC-wrapped cloud tunnel.")
+        rg = api.post("/api/remote-gateway", {})
         if rg:
-            st.success(f"Remote gateway **{rg['status']}**")
+            st.markdown(
+                f'<span class="chip chip-green">{rg["status"]}</span>', unsafe_allow_html=True
+            )
             st.code(f"Peer ID: {rg['peer_id']}", language=None)
-            st.caption("Share this peer ID with B2B partners to establish a PQC-wrapped data path.")
-        if stats:
-            st.caption(f"Last connector ingest: {stats.get('last_ingest', 'never')}")
+            st.caption("Share this peer ID with a B2B partner to establish a PQC data path.")
+        if stats and stats.get("last_ingest"):
+            st.caption(f"Last connector ingest: {stats['last_ingest']}")
 
 
-# ── TAB 3: PQC Wrapper ───────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+#  TAB 3 — PQC Wrapper                                                        #
+# --------------------------------------------------------------------------- #
 def page_wrapper():
-    st.markdown("#### PQC Wrapper — apply or remove quantum-safe wrap on LAN devices")
+    devices = api.get("/api/devices") or []
+    tokens = api.get("/api/tokens") or []
 
-    devices = api_get("/api/devices") or []
-    tokens = api_get("/api/tokens") or []
-
-    # Connector token section
-    st.markdown("##### Step 1 — Create connector token")
+    st.markdown("#### Step 1 — Create a connector token")
+    st.caption("The token authenticates your LAN Connector to the cloud (Authorization: Bearer ...).")
     with st.form("create_token"):
-        tname = st.text_input("Connector name", value="Office LAN Connector")
-        org = st.text_input("Organisation", value="My Organisation")
+        c1, c2 = st.columns(2)
+        name = c1.text_input("Connector name", value="Office LAN Connector")
+        org = c2.text_input("Organisation", value="My Organisation")
         if st.form_submit_button("Generate token", type="primary"):
-            result = api_post("/api/tokens", {"name": tname, "org_name": org})
-            if result:
+            res = api.post("/api/tokens", {"name": name, "org_name": org})
+            if res:
                 st.success("Token created — copy it now, it won't be shown again!")
-                st.code(result["token"], language=None)
-                st.session_state["last_token"] = result["token"]
+                st.code(res["token"], language=None)
 
     if tokens:
         st.markdown("**Active connectors**")
-        st.dataframe(pd.DataFrame(tokens), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(tokens)[["name", "org_name", "token_prefix", "device_count", "last_seen", "active"]],
+            use_container_width=True, hide_index=True,
+        )
 
     st.markdown("---")
-    st.markdown("##### Step 2 — Download LAN Connector")
-    st.markdown("""
-The **LAN Connector** is a small Python script that runs **inside your network**.
-It scans local devices and uploads inventory to the cloud via HTTPS.
+    st.markdown("#### Step 2 — Download & run the LAN Connector")
+    api_url = api.current_url()
+    st.markdown(f"""
+The **LAN Connector** is a small Python script that runs **inside your network**. It scans
+device & crypto metadata (no payloads) and uploads it to the cloud over HTTPS.
 
 ```
-Your LAN  →  connector.py  →  HTTPS POST /api/ingest  →  Cloud Dashboard
-                              Authorization: Bearer <token>
+Your LAN  →  connector.py  →  HTTPS POST /api/ingest  →  Cloud dashboard
+                             Authorization: Bearer <token>
 ```
 
-**How to use:**
-1. Generate a token above
-2. Download `connector.py` below
+**Run it:**
+1. Copy a token from Step 1.
+2. Download `connector.py` below.
 3. On a machine inside your LAN: `pip install requests`
-4. Run: `python connector.py --token <token> --url <cloud-api-url>`
-    """)
+4. `python connector.py --token <token> --url {api_url}`
+""")
 
-    connector_src = (ROOT / "connector" / "connector.py").read_text(encoding="utf-8")
-    st.download_button(
-        "⬇️ Download connector.py",
-        connector_src,
-        file_name="connector.py",
-        mime="text/x-python",
-        type="primary",
-    )
-    st.code(f"python connector.py --token YOUR_TOKEN --url {API}", language="bash")
+    if CONNECTOR_SRC.exists():
+        st.download_button(
+            "⬇️ Download connector.py",
+            CONNECTOR_SRC.read_text(encoding="utf-8"),
+            file_name="connector.py",
+            mime="text/x-python",
+            type="primary",
+        )
+    st.code(f"python connector.py --token pqcg_YOUR_TOKEN --url {api_url}", language="bash")
 
     st.markdown("---")
-    st.markdown("##### Step 3 — Wrap / unwrap devices")
-
+    st.markdown("#### Step 3 — Apply / remove PQC wrap on LAN devices")
     if not devices:
-        st.warning("No devices in inventory. Run the connector first.")
-        return
+        st.warning("No devices in inventory yet. Run the connector first.")
+    else:
+        df = pd.DataFrame(devices)
+        df_view = df[["id", "ip", "service", "priority_tier", "risk_score", "wrap_status"]].copy()
+        df_view.insert(0, "select", False)
+        edited = st.data_editor(
+            df_view, use_container_width=True, hide_index=True,
+            column_config={"select": st.column_config.CheckboxColumn("✓", width="small")},
+            disabled=["id", "ip", "service", "priority_tier", "risk_score", "wrap_status"],
+            key="wrap_editor",
+        )
+        selected = edited[edited["select"]]["id"].tolist()
+        c1, c2, c3 = st.columns([1, 1, 4])
+        if c1.button("🔒 Apply wrap", type="primary", disabled=not selected):
+            res = api.post("/api/wrapper", {"device_ids": selected, "action": "apply"})
+            if res:
+                st.success(f"Wrapped {res['updated']} device(s).")
+                st.rerun()
+        if c2.button("🔓 Remove wrap", disabled=not selected):
+            res = api.post("/api/wrapper", {"device_ids": selected, "action": "remove"})
+            if res:
+                st.success(f"Unwrapped {res['updated']} device(s).")
+                st.rerun()
 
-    df = pd.DataFrame(devices)
-    st.dataframe(
-        df[["id", "ip", "hostname", "service", "wrap_status", "priority_tier", "risk_score"]],
-        use_container_width=True, hide_index=True,
-    )
+    st.markdown("---")
+    st.markdown("#### Live PQC tunnel — prove the wrap actually works")
+    st.caption("Runs a real post-quantum handshake (KEM + signed transcript) and AES-256-GCM "
+               "record, then verifies the data is recovered. This is the gateway mechanism.")
+    c1, c2 = st.columns([3, 1])
+    msg = c1.text_input("Plaintext to wrap", value="Confidential LAN payload", label_visibility="collapsed")
+    mode = c2.selectbox("Mode", ["memory", "socket"], label_visibility="collapsed")
+    if st.button("Run PQC wrap test"):
+        res = api.post("/api/pqc/wrap-demo", {"message": msg, "mode": mode})
+        if res:
+            if mode == "socket":
+                ok = res.get("ok")
+                st.markdown(
+                    f'{"✅" if ok else "❌"} Socket tunnel round-trip on port '
+                    f'**{res.get("gateway_port")}** — `{res.get("response")}`'
+                )
+                st.json(res.get("transcript", {}))
+            else:
+                st.markdown(
+                    f'{"✅" if res.get("verified") else "❌"} **Verified** — '
+                    f'{res.get("kem_alg")} / {res.get("sig_alg")} '
+                    f'({"quantum-safe" if res.get("quantum_safe") else "demo"})'
+                )
+                d1, d2 = st.columns(2)
+                d1.metric("Ciphertext bytes", res.get("ciphertext_bytes"))
+                d2.metric("Keys match", "yes" if res.get("keys_match") else "no")
+                st.text_input("Wrapped (AES-256-GCM, hex)", value=res.get("ciphertext_hex", "")[:120] + " ...")
+                st.text_input("Recovered plaintext", value=res.get("recovered", ""))
 
-    selected = st.multiselect(
-        "Select devices",
-        options=df["id"].tolist(),
-        format_func=lambda i: f"{df[df['id']==i]['ip'].values[0]} ({df[df['id']==i]['wrap_status'].values[0]})",
-    )
-    c1, c2 = st.columns(2)
-    if c1.button("✅ Apply PQC Wrap", type="primary", disabled=not selected):
-        r = api_post("/api/wrapper", {"device_ids": selected, "action": "apply"})
-        if r:
-            st.success(f"Wrapped {r['updated']} device(s)")
-            st.rerun()
-    if c2.button("❌ Remove Wrap", disabled=not selected):
-        r = api_post("/api/wrapper", {"device_ids": selected, "action": "remove"})
-        if r:
-            st.success(f"Unwrapped {r['updated']} device(s)")
-            st.rerun()
 
-
-# ── TAB 4: PQC Inventory ─────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+#  TAB 4 — PQC Inventory                                                      #
+# --------------------------------------------------------------------------- #
 def page_inventory():
-    st.markdown("#### PQC Inventory — staged hybrid onboarding")
+    devices = api.get("/api/devices") or []
+    st.markdown("#### PQC onboarding priority")
+    st.caption("Devices are tiered by risk so you can migrate in waves — a hybrid rollout, "
+               "not a single-day cutover.")
 
-    devices = api_get("/api/devices") or []
     if not devices:
-        st.info("Run the LAN Connector to populate inventory.")
+        st.info("No inventory yet. Deploy the LAN Connector from **PQC Wrapper**.")
         return
 
     df = pd.DataFrame(devices)
-    display_cols = [
-        "ip", "service", "port", "tls_version", "cert_type",
-        "weak_protocol", "pqc_candidate", "priority_tier", "wrap_status", "risk_score",
-    ]
-    existing = [c for c in display_cols if c in df.columns]
+    cols = ["ip", "service", "port", "tls_version", "cert_type", "weak_protocol",
+            "pqc_candidate", "wrap_status", "risk_score"]
+    rename = {
+        "ip": "IP", "service": "Service", "port": "Port", "tls_version": "TLS Version",
+        "cert_type": "Certificate Type", "weak_protocol": "Weak Protocol",
+        "pqc_candidate": "PQC Candidate", "wrap_status": "Wrap", "risk_score": "Risk",
+    }
 
-    for tier, label, color in [
-        ("tier-1", "🔴 Tier 1 — Critical (onboard first)", "tier-1"),
-        ("tier-2", "🟡 Tier 2 — Standard (week 3–6)", "tier-2"),
-        ("tier-3", "⚪ Tier 3 — Low priority / IoT (week 7+)", "tier-3"),
-    ]:
+    tiers = [
+        ("tier-1", "Tier 1 — Critical (wrap within 7 days)", "🔴"),
+        ("tier-2", "Tier 2 — Standard (within 30 days)", "🟠"),
+        ("tier-3", "Tier 3 — Low / IoT (monitor & schedule)", "⚪"),
+    ]
+    for tier, label, icon in tiers:
         subset = df[df["priority_tier"] == tier]
-        st.markdown(f"### {label} ({len(subset)} devices)")
+        st.markdown(f"##### {icon} {label} — {len(subset)} device(s)")
         if len(subset):
-            st.dataframe(subset[existing], use_container_width=True, hide_index=True)
+            st.dataframe(subset[cols].rename(columns=rename), use_container_width=True, hide_index=True)
         else:
-            st.caption("No devices in this tier.")
+            st.caption("None in this tier.")
+        st.markdown("")
 
     st.markdown("---")
-    st.markdown("#### 🤖 AI Migration Advisor")
-    st.caption("Analyses your inventory and recommends onboarding order. Rule-based by default; uses OpenAI if API key is configured.")
-    if st.button("Generate recommendation"):
-        advice = api_get("/api/advisor")
+    st.markdown("### 🤖 AI Migration Advisor")
+    st.caption("Analyses your inventory and recommends a staged onboarding order. "
+               "Rule-based by default; uses OpenAI if an API key is configured.")
+    if st.button("Generate recommendation", type="primary"):
+        advice = api.get("/api/advisor")
         if advice:
-            st.info(f"*Source: {advice['source']}*")
+            st.info(f"Source: {advice['source']}")
             st.markdown(advice["advice"])
 
 
-# ── TAB 5: Reports ───────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+#  TAB 5 — Reports                                                            #
+# --------------------------------------------------------------------------- #
 def page_reports():
     st.markdown("#### Reports & export")
-    st.caption("Documentation for implementation planning, customer reporting, and HLD/LLD drafts.")
+    st.caption("Consulting-grade documentation: implementation planning, HLD, change control, "
+               "and customer reporting.")
 
     reports = [
         ("inventory.csv", "CSV inventory", "csv"),
-        ("inventory.json", "JSON connector output", "json"),
+        ("inventory.json", "JSON (connector output)", "json"),
         ("inventory.pdf", "PDF report", "pdf"),
-        ("migration.txt", "Migration summary", "migration"),
-        ("hld.txt", "HLD-style summary", "hld"),
+        ("migration-summary.txt", "Migration summary", "migration"),
+        ("hld-summary.txt", "HLD-style summary", "hld"),
         ("change-plan.txt", "Change plan draft", "change-plan"),
-        ("risk.txt", "Risk report", "risk"),
+        ("risk-report.txt", "Risk report", "risk"),
     ]
-
     cols = st.columns(3)
     for i, (fname, label, fmt) in enumerate(reports):
         with cols[i % 3]:
-            try:
-                r = httpx.get(f"{API}/api/reports/{fmt}", timeout=10)
-                if r.status_code == 200:
-                    st.download_button(
-                        f"⬇️ {label}",
-                        r.content if fmt == "pdf" else r.text,
-                        file_name=fname,
-                        mime="application/octet-stream",
-                        key=f"dl_{fmt}",
-                    )
-            except Exception:
-                st.button(f"{label} (API offline)", disabled=True, key=f"off_{fmt}")
+            content, is_binary = api.get_report(fmt)
+            if content is not None:
+                st.download_button(f"⬇️ {label}", content, file_name=fname,
+                                   mime="application/octet-stream", key=f"dl_{fmt}",
+                                   use_container_width=True)
+            else:
+                st.button(f"{label} (unavailable)", disabled=True, key=f"off_{fmt}",
+                          use_container_width=True)
 
 
-# ── Main navigation ──────────────────────────────────────────────────────────
+# --------------------------------------------------------------------------- #
+#  Sidebar + routing                                                          #
+# --------------------------------------------------------------------------- #
+def sidebar() -> str:
+    with st.sidebar:
+        st.markdown("## PQC Gateway")
+        page = st.radio("Navigation", ["About", "Dashboard", "PQC Wrapper", "PQC Inventory", "Reports"],
+                        label_visibility="collapsed")
+        st.divider()
+
+        connected, label = api.status()
+        if connected and "built-in" in label:
+            st.success("Backend: built-in (in-process)")
+        elif connected:
+            st.success("API connected")
+        else:
+            st.error("API offline")
+        st.caption(f"URL: `{api.current_url()}`")
+
+        with st.expander("Connection settings"):
+            mode_labels = {"auto": "Auto (recommended)", "embedded": "Built-in only", "remote": "Remote API only"}
+            current = st.session_state.get("api_mode", "auto")
+            choice = st.radio("Backend mode", list(mode_labels.values()),
+                              index=list(mode_labels).index(current))
+            new_mode = {v: k for k, v in mode_labels.items()}[choice]
+            if new_mode != current:
+                st.session_state["api_mode"] = new_mode
+                st.session_state.pop("_embedded_fallback", None)
+                st.rerun()
+            url = st.text_input("Remote API URL", value=st.session_state.get("api_url_override") or api.default_url())
+            if st.button("Apply URL"):
+                st.session_state["api_url_override"] = api.normalize_url(url)
+                st.session_state.pop("_embedded_fallback", None)
+                st.rerun()
+            st.caption("Local: `http://127.0.0.1:8000` · Cloud: your Render API URL")
+
+        if st.button("↻ Refresh"):
+            st.rerun()
+        st.caption("DIY post-quantum LAN protection")
+    return page
+
+
+PAGES = {
+    "About": page_about,
+    "Dashboard": page_dashboard,
+    "PQC Wrapper": page_wrapper,
+    "PQC Inventory": page_inventory,
+    "Reports": page_reports,
+}
+
+
 def main():
     header_bar()
-
-    with st.sidebar:
-        st.markdown("### Navigation")
-        page = st.radio(
-            "Go to",
-            ["About", "Dashboard", "PQC Wrapper", "PQC Inventory", "Reports"],
-            label_visibility="collapsed",
-        )
-        st.divider()
-        st.caption(f"API: `{API}`")
-        if st.button("↻ Refresh data"):
-            st.rerun()
-
-    pages = {
-        "About": page_about,
-        "Dashboard": page_dashboard,
-        "PQC Wrapper": page_wrapper,
-        "PQC Inventory": page_inventory,
-        "Reports": page_reports,
-    }
-    pages[page]()
+    PAGES[sidebar()]()
 
 
 main()

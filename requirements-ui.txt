@@ -1,3 +1,9 @@
-streamlit>=1.40.0
-httpx>=0.28.0
-pandas>=2.0.0
+# Alias of requirements.txt for Streamlit Cloud
+streamlit==1.40.2
+pandas>=2.0,<3
+httpx==0.28.1
+fastapi==0.115.5
+pydantic==2.10.3
+pydantic-settings==2.7.0
+sqlalchemy==2.0.36
+cryptography>=42,<45

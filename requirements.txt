@@ -1,9 +1,13 @@
-streamlit>=1.40.0
-httpx>=0.28.0
-pandas>=2.0.0
-fastapi
-uvicorn[standard]
-python-multipart
-pydantic-settings
-sqlalchemy
-psycopg2-binary
+# Streamlit Cloud — dashboard + in-process backend fallback
+# (Pinned for Python 3.12. streamlit 1.40.x is compatible with FastAPI's starlette pin.)
+streamlit==1.40.2
+pandas>=2.0,<3
+httpx==0.28.1
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.7.0
+sqlalchemy==2.0.36
+python-multipart==0.0.20
+psycopg2-binary>=2.9,<3
+cryptography>=42,<45

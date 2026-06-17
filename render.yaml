@@ -2,8 +2,13 @@ services:
   - type: web
     name: pqc-gateway-api
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements-api.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
       - key: PQCG_SECRET_KEY
         generateValue: true
+      - key: PQCG_CORS_ORIGINS
+        value: "*"

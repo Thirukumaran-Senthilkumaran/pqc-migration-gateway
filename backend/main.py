@@ -1,37 +1,10 @@
-"""FastAPI entry point — cloud API for LAN connector + dashboard."""
+﻿"""Compatibility entry point.
 
-from __future__ import annotations
+Use `uvicorn api.main:app` for new deployments. This module exists so older
+Render services configured with `uvicorn backend.main:app` still run the rebuilt
+FastAPI app instead of the archived legacy backend.
+"""
 
-from contextlib import asynccontextmanager
+from api.main import app, run
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from .config import get_settings
-from .database import init_db
-from .routes import api, ingest
-
-settings = get_settings()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
-
-
-app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins.split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.include_router(ingest.router)
-app.include_router(api.router)
-
-
-def run():
-    import uvicorn
-    uvicorn.run("backend.main:app", host=settings.api_host, port=settings.api_port, reload=False)
+__all__ = ["app", "run"]

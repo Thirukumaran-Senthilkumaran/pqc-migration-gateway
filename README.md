@@ -1,58 +1,100 @@
-# PQC Cloud Gateway
+# PQC Migration Gateway
 
-> Cloud-hosted post-quantum migration platform with LAN Connector architecture.
+> Wrap your LAN in post-quantum encryption — protect legacy devices that will never get a PQC upgrade.
 
-Protect entire LAN segments without upgrading every device. A lightweight **LAN Connector**
-runs inside your network, uploads inventory to the cloud, and the dashboard manages
-PQC wrap policies, staged migration, and consulting-grade reports.
+Enterprise networks are full of systems that cannot be upgraded to post-quantum
+cryptography (OT, IoT, appliances, EOL firmware). Instead of upgrading every device, this
+platform deploys a **gateway** that wraps ingress/egress traffic in PQC, giving the whole
+LAN quantum-safe coverage **now** — then migrating endpoints to native PQC tier-by-tier.
+It also secures **B2B data transfer** over a PQC tunnel.
 
 ## Architecture
 
 ```
-LAN (connector.py)  ──HTTPS POST /api/ingest──▶  FastAPI Cloud API
-                                                        ▲
-Streamlit Dashboard  ──────────────────────────────── HTTP
+ LAN (inside customer network)                         Cloud
+ ┌───────────────────────────┐      HTTPS POST        ┌──────────────────────┐
+ │  connector.py             │  /api/ingest (Bearer)  │  FastAPI API (Render)│
+ │  scans device metadata    │ ─────────────────────▶ │  SQLite / Postgres   │
+ └───────────────────────────┘                        └─────────┬────────────┘
+                                                                 │ HTTP
+                                                       ┌─────────▼────────────┐
+                                                       │ Streamlit Dashboard  │
+                                                       │ (Streamlit Cloud)    │
+                                                       └──────────────────────┘
 ```
 
-## Quick start (local)
+Three pieces, one repo:
+
+| Piece | Path | Role |
+|-------|------|------|
+| **API** | `api/` | FastAPI. Connector ingest, inventory, policy, reports, PQC demos. |
+| **Dashboard** | `ui/` | Streamlit. 5 tabs + settings. Talks to the API (with an in-process fallback). |
+| **Connector** | `connector/connector.py` | Downloadable LAN scanner; uploads metadata over HTTPS. |
+| **PQC engine** | `pqc/` | Pluggable backend (demo or liboqs) + AES-256-GCM tunnel + socket gateway. |
+
+## Quick start (local, Windows)
+
+```
+start.cmd
+```
+
+Then open:
+- Dashboard: http://127.0.0.1:8501
+- API health: http://127.0.0.1:8000/api/health
+
+### Manual start
 
 ```powershell
-.\start.bat
+py -3 -m venv .venv
+.\.venv\Scripts\pip install -r requirements-local.txt
+
+# Terminal 1 — API
+.\.venv\Scripts\python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2 — Dashboard
+$env:API_BASE_URL="http://127.0.0.1:8000"
+.\.venv\Scripts\streamlit run ui/app.py --server.port 8501
 ```
 
-- **API:** http://localhost:8000
-- **UI:** http://localhost:8501
+## Connector workflow
+
+1. Dashboard → **PQC Wrapper** → create a connector token.
+2. Download `connector.py`.
+3. Inside your LAN: `pip install requests`
+4. `python connector.py --token pqcg_XXXX --url <api-url>`
+5. Inventory appears in **Dashboard** and **PQC Inventory**.
 
 ## Tabs
 
 | Tab | Purpose |
 |-----|---------|
-| About | Author, contact, motivation |
-| Dashboard | PQC coverage, LAN stats, remote B2B gateway |
-| PQC Wrapper | Token creation, connector download, wrap/unwrap |
-| PQC Inventory | Priority tiers + AI Migration Advisor |
-| Reports | PDF, CSV, JSON, HLD, change plan, risk |
+| About | Author, motivation, contact |
+| Dashboard | LAN/PQC state, coverage, B2B remote gateway |
+| PQC Wrapper | Token + connector download, wrap/unwrap, **live PQC tunnel test** |
+| PQC Inventory | Priority tiers (IP/Service/Port/TLS/Cert/Weak/PQC candidate) + **AI Advisor** |
+| Reports | CSV, JSON, PDF, migration summary, HLD, change plan, risk |
 
-## LAN Connector workflow
+## PQC engine
 
-1. Open dashboard → **PQC Wrapper**
-2. Create connector token
-3. Download `connector.py`
-4. Inside LAN: `pip install requests && python connector.py --token <token> --url http://localhost:8000`
-5. Dashboard populates automatically
+- **Demo backend** (default): functional KEM (matching shared secret, ML-KEM-768 sizing) +
+  real Ed25519 signatures + real AES-256-GCM. Runs anywhere. *Not* quantum-safe.
+- **liboqs backend**: real **ML-KEM-768** + **ML-DSA-65** when `oqs` is installed
+  (`PQCG_PQC_BACKEND=liboqs`). Same interface.
 
-## Cloud deployment
+## Deployment
 
-| Component | Platform | Entry |
-|-----------|----------|-------|
-| API | Render / Railway | `uvicorn backend.main:app --port 8000` |
-| UI | Streamlit Cloud | `streamlit_app.py`, requirements: `requirements-ui.txt` |
+See [`DEPLOYMENT.md`](DEPLOYMENT.md). API → Render (`render.yaml`), UI → Streamlit Cloud
+(`streamlit_app.py`, secret `API_BASE_URL`).
 
-Set Streamlit secret: `API_BASE_URL = https://your-api.onrender.com`
+## Design docs
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — High-Level Design (HLD)
+- [`LLD.md`](LLD.md) — Low-Level Design (protocol, data model, sequences)
 
 ## Author
 
-**Thirukumaran Senthilkumaran**  
-[LinkedIn](https://www.linkedin.com/in/thirukumaran-s-45588b43) · Thirukumaranarun98@gmail.com · +91 8098276733
+**Thirukumaran Senthilkumaran** — MSc Applied Cybersecurity, University of South Wales
+[LinkedIn](https://www.linkedin.com/in/thirukumaran-s-45588b43) ·
+Thirukumaranarun98@gmail.com · +91 8098276733
 
-MIT License
+MIT License.

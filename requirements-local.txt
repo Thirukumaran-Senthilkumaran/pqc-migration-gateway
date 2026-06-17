@@ -1,4 +1,5 @@
-# Local development — API + UI + connector
+# Full local development (API + UI + connector)
 -r requirements-api.txt
--r requirements-ui.txt
-requests>=2.31.0
+streamlit==1.40.2
+pandas>=2.0,<3
+requests>=2.31

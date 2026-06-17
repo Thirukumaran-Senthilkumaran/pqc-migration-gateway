@@ -1,6 +1,11 @@
-"""Streamlit Cloud entry — runs ui/app.py."""
+"""Streamlit Cloud entry point. Runs the dashboard in ui/app.py."""
 
 import runpy
+import sys
 from pathlib import Path
 
-runpy.run_path(str(Path(__file__).parent / "ui" / "app.py"), run_name="__main__")
+ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+runpy.run_path(str(ROOT / "ui" / "app.py"), run_name="__main__")

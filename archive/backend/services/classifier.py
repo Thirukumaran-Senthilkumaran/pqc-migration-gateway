@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .models import LanDevice
+from ..models import LanDevice
 
 WEAK_TLS = {"SSLv3", "TLSv1", "TLSv1.0", "TLSv1.1"}
 SERVICE_RISK = {
