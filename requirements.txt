@@ -5,3 +5,5 @@ fastapi
 uvicorn[standard]
 python-multipart
 pydantic-settings
+sqlalchemy
+psycopg2-binary
